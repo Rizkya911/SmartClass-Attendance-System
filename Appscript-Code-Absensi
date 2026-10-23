@@ -1,0 +1,261 @@
+const MATA_KULIAH = [
+  "Pancasila",
+  "Organisasi dan Arsitektur Komputer",
+  "Kalkulus",
+  "Algoritma Pemrograman",
+  "Agama",
+  "Matematika Diskrit",
+  "Pengenalan Pemrograman"
+];
+
+const MAHASISWA = [
+  "Alif Fadillah Sidiq",
+  "Alisa Pratama",
+  "Almara Fajryyah",
+  "Alya Labbaiq",
+  "Anita Siti Muslimah",
+  "Asyraf Muhammad",
+  "Azizah Nurrohman Fauziah",
+  "Citra Bilqish Azzahra",
+  "Ergy Novarina",
+  "Fadli Nurjaman",
+  "Indar Mutiara",
+  "Jawad Bassam Al Ghifary",
+  "Laila Mustika Aulia",
+  "Laila Oktafiana Putri",
+  "Lusiana",
+  "Manda Agustina",
+  "Maria Astayu Dihut",
+  "Maysarah Sydqi Mubarok",
+  "Muhamad Hardi",
+  "Muhammad Baqir N",
+  "Muhammad Rizki",
+  "Nurul Andriani",
+  "Nurul Hanifiyah",
+  "Panji Mauludin",
+  "Qirana Maharani",
+  "Ridho Farid Atallah",
+  "Risqi Maulida",
+  "Rizka Aji Kemalasari",
+  "Rizki Adittya Paturohman",
+  "Rizkya Reza Febriana",
+  "Rohani Nurhikmah",
+  "Salma Isti Hasna",
+  "Siti Nazwa Nuralifah",
+  "Tabilani",
+  "Vini Estiani",
+  "Yulita Nuraeni"
+];
+
+const JUMLAH_PERTEMUAN = 16;
+const PERTEMUAN_UTS = 8;
+const PERTEMUAN_UAS = 16;
+const STATUS = ["Hadir", "Sakit", "Izin", "Tidak Hadir"];
+
+const BARIS_HEADER = 3;
+const BARIS_DATA_AWAL = 4;
+const KOLOM_PERTEMUAN_AWAL = 3; // kolom C
+
+// Posisi kotak "Pertemuan ke" dan "Hadir semua" (di bawah tabel)
+const BARIS_INPUT_PERTEMUAN = BARIS_DATA_AWAL + MAHASISWA.length + 2; // baris 42
+const BARIS_CENTANG = BARIS_INPUT_PERTEMUAN + 1;                      // baris 43
+const KOLOM_INPUT = 3; // kolom C
+
+// Menu otomatis saat spreadsheet dibuka 
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("Absensi")
+    .addItem("Buat / Reset Semua Sheet", "buatSemuaSheet")
+    .addToUi();
+}
+
+//Jalankan fungsi ini untuk membuat semua sheet (akan menghapus isi lama)
+function buatSemuaSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  MATA_KULIAH.forEach(function (nama) {
+    let sheet = ss.getSheetByName(nama);
+    if (sheet) {
+      sheet.clear();
+      sheet.clearConditionalFormatRules();
+      sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).clearDataValidations();
+      sheet.setFrozenRows(0);
+      sheet.setFrozenColumns(0);
+    } else {
+      sheet = ss.insertSheet(nama);
+    }
+    isiSheet(sheet, nama);
+  });
+
+  // Hapus sheet bawaan kosong (Sheet1 / Lembar1)
+  ["Sheet1", "Lembar1"].forEach(function (n) {
+    const s = ss.getSheetByName(n);
+    if (s && ss.getSheets().length > 1 && s.getLastRow() <= 1 && s.getLastColumn() <= 1) {
+      ss.deleteSheet(s);
+    }
+  });
+
+  ss.setActiveSheet(ss.getSheetByName(MATA_KULIAH[0]));
+  SpreadsheetApp.getUi().alert("Selesai! 7 sheet absensi berhasil dibuat.");
+}
+
+function isiSheet(sheet, namaMK) {
+  const jmlSiswa = MAHASISWA.length;
+  const kolomP_akhir = KOLOM_PERTEMUAN_AWAL + JUMLAH_PERTEMUAN - 1; // R
+  const kolomHadir = kolomP_akhir + 1;     // S
+  const kolomPersen = kolomP_akhir + 5;    // W
+  const totalKolom = kolomPersen;
+  const baris_akhir = BARIS_DATA_AWAL + jmlSiswa - 1;
+
+  // Judul
+  sheet.getRange(1, 1).setValue("DAFTAR ABSENSI - " + namaMK.toUpperCase())
+    .setFontSize(14).setFontWeight("bold");
+
+  // Header
+  const header = ["No", "Nama"];
+  for (let p = 1; p <= JUMLAH_PERTEMUAN; p++) {
+    if (p === PERTEMUAN_UTS) header.push("UTS");
+    else if (p === PERTEMUAN_UAS) header.push("UAS");
+    else header.push("P" + p);
+  }
+  header.push("Hadir", "Sakit", "Izin", "Tidak Hadir", "% Hadir");
+
+  sheet.getRange(BARIS_HEADER, 1, 1, totalKolom).setValues([header])
+    .setFontWeight("bold")
+    .setBackground("#1f4e78")
+    .setFontColor("#ffffff")
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle");
+
+  // Highlight header UTS & UAS
+  sheet.getRange(BARIS_HEADER, KOLOM_PERTEMUAN_AWAL + PERTEMUAN_UTS - 1).setBackground("#c55a11");
+  sheet.getRange(BARIS_HEADER, KOLOM_PERTEMUAN_AWAL + PERTEMUAN_UAS - 1).setBackground("#c55a11");
+
+  // No & Nama
+  const noNama = MAHASISWA.map(function (n, i) { return [i + 1, n]; });
+  sheet.getRange(BARIS_DATA_AWAL, 1, jmlSiswa, 2).setValues(noNama);
+  sheet.getRange(BARIS_DATA_AWAL, 1, jmlSiswa, 1).setHorizontalAlignment("center");
+
+  // Dropdown status kustom
+  const aturan = SpreadsheetApp.newDataValidation()
+    .requireValueInList(STATUS, true)
+    .setAllowInvalid(false)
+    .build();
+  const areaPertemuan = sheet.getRange(BARIS_DATA_AWAL, KOLOM_PERTEMUAN_AWAL, jmlSiswa, JUMLAH_PERTEMUAN);
+  areaPertemuan.setDataValidation(aturan).setHorizontalAlignment("center");
+
+  // Rumus rekap per siswa
+  // Diperbaiki: pemisah argumen rumus menggunakan titik koma (;)
+  const rumus = [];
+  for (let r = BARIS_DATA_AWAL; r <= baris_akhir; r++) {
+    const rng = "C" + r + ":" + kolomHuruf(kolomP_akhir) + r;
+    rumus.push([
+      '=COUNTIF(' + rng + ';"Hadir")',
+      '=COUNTIF(' + rng + ';"Sakit")',
+      '=COUNTIF(' + rng + ';"Izin")',
+      '=COUNTIF(' + rng + ';"Tidak Hadir")',
+      '=IF(COUNTA(' + rng + ')=0;0;' + kolomHuruf(kolomHadir) + r + '/COUNTA(' + rng + '))'
+    ]);
+  }
+  sheet.getRange(BARIS_DATA_AWAL, kolomHadir, jmlSiswa, 5).setFormulas(rumus)
+    .setHorizontalAlignment("center");
+  sheet.getRange(BARIS_DATA_AWAL, kolomPersen, jmlSiswa, 1).setNumberFormat("0%");
+  sheet.getRange(BARIS_DATA_AWAL, kolomHadir, jmlSiswa, 5).setBackground("#f2f2f2");
+
+  // Conditional formatting untuk status
+  const rules = [
+    { teks: "Hadir", bg: "#c6efce", fg: "#006100" },
+    { teks: "Sakit", bg: "#ffeb9c", fg: "#9c5700" },
+    { teks: "Izin", bg: "#bdd7ee", fg: "#1f4e78" },
+    { teks: "Tidak Hadir", bg: "#ffc7ce", fg: "#9c0006" }
+  ].map(function (x) {
+    return SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo(x.teks)
+      .setBackground(x.bg)
+      .setFontColor(x.fg)
+      .setRanges([areaPertemuan])
+      .build();
+  });
+  sheet.setConditionalFormatRules(rules);
+
+  // Border tabel
+  sheet.getRange(BARIS_HEADER, 1, jmlSiswa + 1, totalKolom)
+    .setBorder(true, true, true, true, true, true);
+
+  // Kotak "Hadir semua" di bawah tabel
+  const pilihanPertemuan = [];
+  for (let p = 1; p <= JUMLAH_PERTEMUAN; p++) pilihanPertemuan.push(String(p));
+
+  sheet.getRange(BARIS_INPUT_PERTEMUAN, 2).setValue("Pertemuan ke :")
+    .setFontWeight("bold").setHorizontalAlignment("right");
+  sheet.getRange(BARIS_INPUT_PERTEMUAN, KOLOM_INPUT)
+    .setValue("-")
+    .setDataValidation(
+      SpreadsheetApp.newDataValidation()
+        .requireValueInList(pilihanPertemuan, true)
+        .setAllowInvalid(true)
+        .build()
+    )
+    .setHorizontalAlignment("center")
+    .setBackground("#fff2cc");
+
+  sheet.getRange(BARIS_CENTANG, 2).setValue("Hadir semua :")
+    .setFontWeight("bold").setHorizontalAlignment("right");
+  sheet.getRange(BARIS_CENTANG, KOLOM_INPUT).insertCheckboxes()
+    .setHorizontalAlignment("center");
+
+  sheet.getRange(BARIS_INPUT_PERTEMUAN, 2, 2, 2)
+    .setBorder(true, true, true, true, true, true);
+
+  // Ukuran kolom & freeze
+  sheet.setColumnWidth(1, 40);
+  sheet.setColumnWidth(2, 210);
+  sheet.setColumnWidths(KOLOM_PERTEMUAN_AWAL, JUMLAH_PERTEMUAN, 85);
+  sheet.setColumnWidths(kolomHadir, 4, 85);
+  sheet.setColumnWidth(kolomPersen, 75);
+  sheet.setRowHeight(BARIS_HEADER, 30);
+  sheet.setFrozenRows(BARIS_HEADER);
+  sheet.setFrozenColumns(2);
+
+  // Hapus kolom berlebih
+  const maxK = sheet.getMaxColumns();
+  if (maxK > totalKolom) sheet.deleteColumns(totalKolom + 1, maxK - totalKolom);
+}
+
+
+function onEdit(e) {
+  if (!e || !e.range) return;
+  const range = e.range;
+  const sheet = range.getSheet();
+
+  if (MATA_KULIAH.indexOf(sheet.getName()) === -1) return;
+  if (range.getRow() !== BARIS_CENTANG || range.getColumn() !== KOLOM_INPUT) return;
+  if (range.getValue() !== true) return;
+
+  const p = Number(sheet.getRange(BARIS_INPUT_PERTEMUAN, KOLOM_INPUT).getValue());
+
+  if (!Number.isInteger(p) || p < 1 || p > JUMLAH_PERTEMUAN) {
+    e.source.toast("Pilih nomor pertemuan (1-" + JUMLAH_PERTEMUAN + ") dulu di kolom 'Pertemuan ke'.", "Absensi", 5);
+    range.setValue(false);
+    return;
+  }
+
+  const kolom = KOLOM_PERTEMUAN_AWAL + p - 1;
+  const data = MAHASISWA.map(function () { return ["Hadir"]; });
+  sheet.getRange(BARIS_DATA_AWAL, kolom, MAHASISWA.length, 1).setValues(data);
+
+  range.setValue(false); // reset centang
+  const label = p === PERTEMUAN_UTS ? "UTS" : (p === PERTEMUAN_UAS ? "UAS" : "pertemuan " + p);
+  e.source.toast("Semua mahasiswa ditandai Hadir pada " + label + ".", "Absensi", 4);
+}
+
+// Ubah nomor kolom jadi huruf (1 -> A, 18 -> R) 
+function kolomHuruf(n) {
+  let s = "";
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
